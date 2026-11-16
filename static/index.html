@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sheetgen-agent — сравнение чертежа с описанием</title>
+<style>
+  :root { --bg:#0b0f14; --panel:#131a23; --border:#233042; --text:#e6edf3; --muted:#8b98a9; --accent:#38bdf8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width:1100px; margin:0 auto; padding:24px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:800px){ .grid{ grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input[type=file], textarea { width:100%; background:#0d131b; color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:8px; font-size:14px; }
+  textarea { min-height:140px; resize:vertical; }
+  button { margin-top:14px; width:100%; padding:10px; font-size:15px; border:0; border-radius:8px;
+    background:var(--accent); color:#04121c; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  #preview { max-width:100%; border:1px solid var(--border); border-radius:6px; margin-top:10px; background:#0d131b; }
+  #report { white-space:pre-wrap; font-size:14px; line-height:1.55; }
+  .status { color:var(--muted); font-size:13px; margin-top:10px; min-height:18px; }
+  .err { color:#f87171; }
+  .diffs li { margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>sheetgen-agent</h1>
+  <div class="sub">Агент, описывающий различия между 3D-чертежом (PNG) и его текстовым описанием</div>
+
+  <div class="grid">
+    <div class="panel">
+      <label for="file">Чертёж (PNG)</label>
+      <input type="file" id="file" accept="image/png,image/jpeg,image/bmp">
+
+      <label for="description">Текстовое описание детали</label>
+      <textarea id="description" placeholder="Например: Фланец круглый, наружный диаметр 120 мм, центральное отверстие 40 мм, 6 крепёжных отверстий по окружности диаметром 90 мм..."></textarea>
+
+      <button id="go">Проанализировать</button>
+      <div class="status" id="status"></div>
+      <div id="preview"></div>
+    </div>
+
+    <div class="panel">
+      <div class="sub">Отчёт агента</div>
+      <ul class="diffs" id="diffs"></ul>
+      <div id="report"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+$("go").onclick = async () => {
+  const file = $("file").files[0];
+  const description = $("description").value.trim();
+  const status = $("status");
+  if (!file) { status.textContent = "Выберите файл чертежа"; status.className = "status err"; return; }
+  if (!description) { status.textContent = "Введите описание детали"; status.className = "status err"; return; }
+
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("description", description);
+
+  $("go").disabled = true;
+  status.textContent = "Векторизация и анализ… (локальная модель может думать долго)";
+  status.className = "status";
+  $("report").textContent = "";
+  $("diffs").innerHTML = "";
+  $("preview").innerHTML = "";
+
+  try {
+    const resp = await fetch("/api/analyze", { method: "POST", body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || resp.statusText);
+
+    status.textContent = "Готово. Модель: " + (data.model || "?");
+    if (data.svg) $("preview").innerHTML = data.svg;
+
+    const report = data.report || {};
+    if (report.summary) {
+      const li = document.createElement("li");
+      li.textContent = report.summary;
+      $("diffs").appendChild(li);
+    }
+    for (const d of (report.differences || [])) {
+      const li = document.createElement("li");
+      li.textContent = `[${d.severity || "?"}] ${d.what} — ${d.where || ""} (${d.type || "?"})`;
+      $("diffs").appendChild(li);
+    }
+    $("report").textContent = report.report_md || data.raw_model_output || "";
+  } catch (e) {
+    status.textContent = "Ошибка: " + e.message;
+    status.className = "status err";
+  } finally {
+    $("go").disabled = false;
+  }
+};
+</script>
+</body>
+</html>

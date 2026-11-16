@@ -1,0 +1,7 @@
+# Проверено на Python 3.11 (opencv-python и numpy уже предустановлены в venv проекта)
+fastapi
+uvicorn
+python-multipart
+httpx
+opencv-python
+numpy
