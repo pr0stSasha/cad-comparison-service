@@ -3,3 +3,11 @@ __pycache__/
 .env
 uploads/
 *.log
+venv/
+.venv/
+OllamaSetup.exe
+*.exe
+report.md
+result.json
+server.log
+.vscode/
